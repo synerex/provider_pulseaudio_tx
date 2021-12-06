@@ -10,11 +10,6 @@ import (
 
 	"github.com/jfreymuth/pulse" // for pulseaudio recording
 
-	"github.com/golang/protobuf/ptypes"
-	"google.golang.org/protobuf/proto"
-
-	storage "github.com/synerex/proto_storage"
-	pb "github.com/synerex/synerex_api"
 	pbase "github.com/synerex/synerex_proto"
 	sxutil "github.com/synerex/synerex_sxutil"
 )
@@ -43,7 +38,13 @@ func SxSend(p []float32) (int, error) {
 		avg += math.Abs(float64(p[i]))
 	}
 	avg = avg / float64(len(p))
-	v := uint8(math.Log2(avg * 10000))
+	pow := 68*math.Log10(avg*200000) - 120
+	if pow < 0 {
+		pow = 0
+	} else if pow > 255 {
+		pow = 255
+	}
+	v := uint8(pow)
 	if *verbose {
 		if *threshold != 0.0 && *threshold < avg {
 			fmt.Printf("Audio Power %d %f(Over Threshold), datalen:%d timeDiff(nsec):%d \n", v, avg, len(p), now-lastUnixNano)
@@ -55,23 +56,23 @@ func SxSend(p []float32) (int, error) {
 		if *threshold == 0.0 || *threshold < avg {
 			// send Synerex
 			// currently use Storage channel. but it should be Media Channel
+			/*
+				ts, _ := ptypes.TimestampProto(time.Now().Add(9 * time.Hour)) // for JST conversion
+				bytes := []byte{v}
 
-			ts, _ := ptypes.TimestampProto(time.Now().Add(9 * time.Hour)) // for JST conversion
-			bytes := []byte{v}
+				media := &storage.Record{
+					BucketName: "AudioVolume",
+					ObjectName: ptypes.TimestampString(ts),
+					Record:     bytes,
+				}
 
-			media := &storage.Record{
-				BucketName: "AudioVolume",
-				ObjectName: ptypes.TimestampString(ts),
-				Record:     bytes,
-			}
+				out, _ := proto.Marshal(media)
 
-			out, _ := proto.Marshal(media)
-
-			cont := pb.Content{Entity: out}
-
+				cont := pb.Content{Entity: out}
+			*/
+			ostr := fmt.Sprintf("vol,%d,%f", v, avg)
 			smo := sxutil.SupplyOpts{
-				Name:  "AudioVolume",
-				Cdata: &cont,
+				Name: ostr,
 			}
 			_, nerr := sxclient.NotifySupply(&smo)
 			if nerr != nil {
@@ -90,7 +91,7 @@ func startCaptureAudio() {
 	}
 	c, err := pulse.NewClient(opts...)
 	if err != nil {
-		fmt.Println(err)
+		fmt.Println("Eroor, open", err)
 		return
 	}
 
@@ -104,6 +105,7 @@ func startCaptureAudio() {
 		fmt.Println(err)
 		return
 	}
+	log.Printf("Start stream ")
 
 	stream.Start()
 
