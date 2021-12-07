@@ -91,7 +91,7 @@ func startCaptureAudio() {
 	}
 	c, err := pulse.NewClient(opts...)
 	if err != nil {
-		fmt.Println("Eroor, open", err)
+		fmt.Println("Error, open", err)
 		return
 	}
 
